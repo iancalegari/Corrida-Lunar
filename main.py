@@ -86,37 +86,47 @@ plataformas = [
 jogador = Jogador(100, CHAO_Y - 180)
 fragmentos = []
 meteoritos = []
+textos_flutuantes = []
 
 camera_x = 0
 pontos = 0
 distancia_max_x = 0
 vidas = VIDAS_INICIAIS
 recorde = carregar_recorde()
+novo_recorde = False
 invulneravel_timer = 0
+shake_timer = 0
 proximo_fragmento_x = 650
 timer_meteorito = 90
 
 menu = True
+pausado = False
 game_over = False
 rodando = True
 
 
 def reiniciar_jogo():
-    global jogador, fragmentos, meteoritos, camera_x
-    global pontos, distancia_max_x, vidas, invulneravel_timer
-    global proximo_fragmento_x, timer_meteorito, game_over
+    global jogador, fragmentos, meteoritos, textos_flutuantes, camera_x
+    global pontos, distancia_max_x, vidas, novo_recorde
+    global invulneravel_timer, shake_timer
+    global proximo_fragmento_x, timer_meteorito, pausado, game_over
 
     jogador = Jogador(100, CHAO_Y - 180)
     fragmentos = []
     meteoritos = []
+    textos_flutuantes = []
     camera_x = 0
     pontos = 0
     distancia_max_x = 0
     vidas = VIDAS_INICIAIS
+    novo_recorde = False
     invulneravel_timer = 0
+    shake_timer = 0
     proximo_fragmento_x = 650
     timer_meteorito = 90
+    pausado = False
     game_over = False
+    pygame.mixer.music.unpause()
 
 
 def desenhar_texto(texto, fonte_usada, cor, x, y, cor_sombra=(75, 80, 95)):
@@ -149,6 +159,57 @@ def desenhar_fundo():
     desenhar_camada_parallax(img_piso, 1.0, y=100)
 
 
+def desenhar_mundo(piscando_vermelho=False):
+    desenhar_fundo()
+
+    for fragmento in fragmentos:
+        fragmento.desenhar(tela, camera_x)
+
+    for meteorito in meteoritos:
+        meteorito.desenhar(tela, camera_x)
+
+    jogador.desenhar(tela, camera_x, piscando_vermelho=piscando_vermelho)
+
+    for tf in textos_flutuantes:
+        largura_tf = fonte.size(tf["texto"])[0]
+        x_tf = int(tf["x"] - camera_x - largura_tf // 2)
+        desenhar_texto(tf["texto"], fonte, tf["cor"], x_tf, int(tf["y"]), cor_sombra=tf["cor_sombra"])
+
+
+def desenhar_hud():
+    distancia_metros = distancia_max_x // 10
+    tela.blit(logo_hud, (24, 20))
+    desenhar_item_hud("DISTÂNCIA: ", f"{distancia_metros} m", 24, 84)
+    desenhar_item_hud("PONTOS: ", pontos, 24, 114)
+    desenhar_item_hud("RECORDE: ", recorde, 24, 144)
+
+    if vidas in imagens_vida:
+        img_vida = imagens_vida[vidas]
+        x_vida = LARGURA - img_vida.get_width() - 24
+        tela.blit(img_vida, (x_vida, 20))
+
+        rotulo_vida = "VIDA: "
+        valor_vida = f"{vidas}/{VIDAS_INICIAIS}"
+        largura_texto = fonte.size(rotulo_vida + valor_vida)[0]
+        y_texto = 20 + img_vida.get_height() // 2 - 9
+        desenhar_item_hud(rotulo_vida, valor_vida, x_vida - largura_texto - 14, y_texto)
+
+    fps_atual = int(relogio.get_fps())
+    largura_fps = fonte.size(f"FPS: {fps_atual}")[0]
+    desenhar_item_hud("FPS: ", fps_atual, LARGURA - largura_fps - 24, ALTURA - 38)
+
+
+def aplicar_screen_shake():
+    global shake_timer
+    if shake_timer > 0:
+        shake_x = random.randint(-8, 8)
+        shake_y = random.randint(-8, 8)
+        copia = tela.copy()
+        tela.fill(PRETO)
+        tela.blit(copia, (shake_x, shake_y))
+        shake_timer -= 1
+
+
 # loop principal do jogo
 while rodando:
 
@@ -167,7 +228,14 @@ while rodando:
             elif game_over and evento.key == pygame.K_RETURN:
                 reiniciar_jogo()
 
-            elif not menu and not game_over and evento.key in (pygame.K_SPACE, pygame.K_UP):
+            elif not menu and not game_over and evento.key == pygame.K_p:
+                pausado = not pausado
+                if pausado:
+                    pygame.mixer.music.pause()
+                else:
+                    pygame.mixer.music.unpause()
+
+            elif not menu and not game_over and not pausado and evento.key in (pygame.K_SPACE, pygame.K_UP):
                 if jogador.no_chao:
                     som_pulo.play()
                 jogador.pular()
@@ -182,22 +250,18 @@ while rodando:
     elif game_over:
 
         jogador.atualizar_gameover(plataformas)
-        # desenha tudo na tela
-        desenhar_fundo()
-
-        for fragmento in fragmentos:
-            fragmento.desenhar(tela, camera_x)
-
-        for meteorito in meteoritos:
-            meteorito.desenhar(tela, camera_x)
-
-        jogador.desenhar(tela, camera_x)
+        desenhar_mundo()
 
         distancia_metros = distancia_max_x // 10
         titulo = fonte_titulo.render("FIM DE JOGO", True, VERMELHO)
         instrucao = fonte.render("Pressione ENTER para jogar novamente", True, AMARELO)
 
-        tela.blit(titulo, (LARGURA // 2 - titulo.get_width() // 2, 340))
+        tela.blit(titulo, (LARGURA // 2 - titulo.get_width() // 2, 330))
+
+        if novo_recorde:
+            texto_recorde = "NOVO RECORDE!"
+            x_rec = LARGURA // 2 - fonte.size(texto_recorde)[0] // 2
+            desenhar_texto(texto_recorde, fonte, AMARELO, x_rec, 385, cor_sombra=(110, 45, 10))
 
         itens_resumo = [
             ("DISTÂNCIA: ", f"{distancia_metros} m"),
@@ -211,15 +275,34 @@ while rodando:
             + largura_separador * (len(itens_resumo) - 1)
         )
         x_atual = LARGURA // 2 - largura_total // 2
+        y_resumo = 430
 
         for i, (rotulo, valor) in enumerate(itens_resumo):
-            desenhar_item_hud(rotulo, valor, x_atual, 420)
+            desenhar_item_hud(rotulo, valor, x_atual, y_resumo)
             x_atual += fonte.size(rotulo)[0] + fonte.size(valor)[0]
             if i < len(itens_resumo) - 1:
-                desenhar_texto(separador, fonte, AMARELO, x_atual, 420, cor_sombra=(110, 45, 10))
+                desenhar_texto(separador, fonte, AMARELO, x_atual, y_resumo, cor_sombra=(110, 45, 10))
                 x_atual += largura_separador
 
-        tela.blit(instrucao, (LARGURA // 2 - instrucao.get_width() // 2, 470))
+        tela.blit(instrucao, (LARGURA // 2 - instrucao.get_width() // 2, 485))
+        aplicar_screen_shake()
+
+    elif pausado:
+
+        desenhar_mundo()
+        desenhar_hud()
+
+        overlay = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 150))
+        tela.blit(overlay, (0, 0))
+
+        titulo_pausa = "PAUSADO"
+        x_titulo_pausa = LARGURA // 2 - fonte_titulo.size(titulo_pausa)[0] // 2
+        desenhar_texto(titulo_pausa, fonte_titulo, AMARELO, x_titulo_pausa, 410, cor_sombra=(110, 45, 10))
+
+        instrucao_pausa = "Pressione P para continuar  |  ESC para sair"
+        x_instr_pausa = LARGURA // 2 - fonte.size(instrucao_pausa)[0] // 2
+        desenhar_texto(instrucao_pausa, fonte, BRANCO, x_instr_pausa, 480)
 
     else:
 
@@ -258,10 +341,28 @@ while rodando:
                 pontos += fragmento.valor
                 if pontos > recorde:
                     recorde = pontos
+                    novo_recorde = True
                     salvar_recorde(recorde)
+
+                cor_tf = AMARELO if fragmento.especial else BRANCO
+                sombra_tf = (110, 45, 10) if fragmento.especial else (75, 80, 95)
+                textos_flutuantes.append({
+                    "texto": f"+{fragmento.valor}",
+                    "x": float(fragmento.rect.centerx),
+                    "y": float(fragmento.rect.top),
+                    "cor": cor_tf,
+                    "cor_sombra": sombra_tf,
+                    "timer": 40,
+                })
                 fragmentos.remove(fragmento)
             elif fragmento.rect.right < camera_x - 200:
                 fragmentos.remove(fragmento)
+
+        for tf in textos_flutuantes[:]:
+            tf["y"] -= 1.4
+            tf["timer"] -= 1
+            if tf["timer"] <= 0:
+                textos_flutuantes.remove(tf)
 
         if invulneravel_timer > 0:
             invulneravel_timer -= 1
@@ -274,6 +375,7 @@ while rodando:
                 som_dano.play()
                 vidas -= 1
                 invulneravel_timer = 60
+                shake_timer = 14
                 meteoritos.remove(meteorito)
                 if vidas <= 0:
                     jogador.morto = True
@@ -282,37 +384,10 @@ while rodando:
                 meteoritos.remove(meteorito)
 
         # desenha tudo na tela
-        desenhar_fundo()
-
-        for fragmento in fragmentos:
-            fragmento.desenhar(tela, camera_x)
-
-        for meteorito in meteoritos:
-            meteorito.desenhar(tela, camera_x)
-
         piscando_vermelho = invulneravel_timer > 0 and (invulneravel_timer // 5) % 2 == 0
-        jogador.desenhar(tela, camera_x, piscando_vermelho=piscando_vermelho)
-
-        distancia_metros = distancia_max_x // 10
-        tela.blit(logo_hud, (24, 20))
-        desenhar_item_hud("DISTÂNCIA: ", f"{distancia_metros} m", 24, 84)
-        desenhar_item_hud("PONTOS: ", pontos, 24, 114)
-        desenhar_item_hud("RECORDE: ", recorde, 24, 144)
-
-        if vidas in imagens_vida:
-            img_vida = imagens_vida[vidas]
-            x_vida = LARGURA - img_vida.get_width() - 24
-            tela.blit(img_vida, (x_vida, 20))
-
-            rotulo_vida = "VIDA: "
-            valor_vida = f"{vidas}/{VIDAS_INICIAIS}"
-            largura_texto = fonte.size(rotulo_vida + valor_vida)[0]
-            y_texto = 20 + img_vida.get_height() // 2 - 9
-            desenhar_item_hud(rotulo_vida, valor_vida, x_vida - largura_texto - 14, y_texto)
-
-        fps_atual = int(relogio.get_fps())
-        largura_fps = fonte.size(f"FPS: {fps_atual}")[0]
-        desenhar_item_hud("FPS: ", fps_atual, LARGURA - largura_fps - 24, ALTURA - 38)
+        desenhar_mundo(piscando_vermelho=piscando_vermelho)
+        desenhar_hud()
+        aplicar_screen_shake()
 
     pygame.display.flip()
 

@@ -195,15 +195,30 @@ while rodando:
 
         distancia_metros = distancia_max_x // 10
         titulo = fonte_titulo.render("FIM DE JOGO", True, VERMELHO)
-        resumo = fonte.render(
-            f"Distância: {distancia_metros} m  |  Pontos: {pontos}  |  Recorde: {recorde}",
-            True,
-            BRANCO
-        )
         instrucao = fonte.render("Pressione ENTER para jogar novamente", True, AMARELO)
 
         tela.blit(titulo, (LARGURA // 2 - titulo.get_width() // 2, 340))
-        tela.blit(resumo, (LARGURA // 2 - resumo.get_width() // 2, 420))
+
+        itens_resumo = [
+            ("DISTÂNCIA: ", f"{distancia_metros} m"),
+            ("PONTOS: ", str(pontos)),
+            ("RECORDE: ", str(recorde)),
+        ]
+        separador = "  |  "
+        largura_separador = fonte.size(separador)[0]
+        largura_total = (
+            sum(fonte.size(r)[0] + fonte.size(v)[0] for r, v in itens_resumo)
+            + largura_separador * (len(itens_resumo) - 1)
+        )
+        x_atual = LARGURA // 2 - largura_total // 2
+
+        for i, (rotulo, valor) in enumerate(itens_resumo):
+            desenhar_item_hud(rotulo, valor, x_atual, 420)
+            x_atual += fonte.size(rotulo)[0] + fonte.size(valor)[0]
+            if i < len(itens_resumo) - 1:
+                desenhar_texto(separador, fonte, AMARELO, x_atual, 420, cor_sombra=(110, 45, 10))
+                x_atual += largura_separador
+
         tela.blit(instrucao, (LARGURA // 2 - instrucao.get_width() // 2, 470))
 
     else:
@@ -217,7 +232,8 @@ while rodando:
 
         # spawna fragmentos na frente
         while proximo_fragmento_x < camera_x + LARGURA + 400:
-            fragmentos.append(Fragmento(proximo_fragmento_x, CHAO_Y - 135))
+            especial = random.random() < CHANCE_FRAGMENTO_ESPECIAL
+            fragmentos.append(Fragmento(proximo_fragmento_x, CHAO_Y - 135, especial=especial))
             proximo_fragmento_x += random.randint(420, 760)
 
         # meteorito pode vir embaixo ou em cima
@@ -239,7 +255,7 @@ while rodando:
             fragmento.atualizar()
 
             if jogador.rect.colliderect(fragmento.rect):
-                pontos += VALOR_FRAGMENTO
+                pontos += fragmento.valor
                 if pontos > recorde:
                     recorde = pontos
                     salvar_recorde(recorde)

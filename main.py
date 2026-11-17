@@ -294,6 +294,10 @@ while rodando:
             y_texto = 20 + img_vida.get_height() // 2 - 9
             desenhar_item_hud(rotulo_vida, valor_vida, x_vida - largura_texto - 14, y_texto)
 
+        fps_atual = int(relogio.get_fps())
+        largura_fps = fonte.size(f"FPS: {fps_atual}")[0]
+        desenhar_item_hud("FPS: ", fps_atual, LARGURA - largura_fps - 24, ALTURA - 38)
+
     pygame.display.flip()
 
 
